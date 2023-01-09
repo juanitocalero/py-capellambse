@@ -129,6 +129,8 @@ class GenericElement:
     _required_attrs = frozenset({"uuid", "xtype"})
     _xmltag: str | None = None
 
+    _class_cache = {}
+
     @property
     def progress_status(self) -> xmltools.AttributeProperty | str:
         uuid = self._element.get("status")
@@ -136,6 +138,7 @@ class GenericElement:
             return "NOT_SET"
 
         return self.from_model(self._model, self._model._loader[uuid]).name
+
 
     @classmethod
     def from_model(
@@ -158,22 +161,27 @@ class GenericElement:
         """
         class_ = cls
         if class_ is GenericElement:
-            xtype = helpers.xtype_of(element)
-            if xtype is not None:
-                ancestors = model._loader.iterancestors(element)
-                for ancestor in ancestors:
-                    anc_xtype = helpers.xtype_of(ancestor)
-                    try:
-                        class_ = XTYPE_HANDLERS[anc_xtype][xtype]
-                    except KeyError:
-                        pass
+            if element.tag in cls._class_cache:
+                class_ = cls._class_cache[element.tag]
+            else:
+                xtype = helpers.xtype_of(element)
+                if xtype is not None:
+                    ancestors = model._loader.iterancestors(element)
+                    for ancestor in ancestors:
+                        anc_xtype = helpers.xtype_of(ancestor)
+                        try:
+                            class_ = XTYPE_HANDLERS[anc_xtype][xtype]
+                        except KeyError:
+                            pass
+                        else:
+                            break
                     else:
-                        break
-                else:
-                    try:
-                        class_ = XTYPE_HANDLERS[None][xtype]
-                    except KeyError:
-                        pass
+                        try:
+                            class_ = XTYPE_HANDLERS[None][xtype]
+                        except KeyError:
+                            pass
+                cls._class_cache[element.tag] = class_
+
         self = class_.__new__(class_)
         self._model = model
         self._element = element
